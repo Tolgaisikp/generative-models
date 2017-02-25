@@ -13,19 +13,21 @@ from tensorflow.examples.tutorials.mnist import input_data
 
 mnist = input_data.read_data_sets('../../MNIST_data', one_hot=True)
 mb_size = 32
-z_dim = 5
+z_dim = 10
 X_dim = mnist.train.images.shape[1]
 y_dim = mnist.train.labels.shape[1]
-h_dim = 128
+h_dim = 512
 cnt = 0
 lr = 1e-3
+TINY = 1e-8
 
 
 # Encoder
 Q = torch.nn.Sequential(
     torch.nn.Linear(X_dim, h_dim),
     torch.nn.ReLU(),
-    torch.nn.Linear(h_dim, z_dim)
+    torch.nn.Linear(h_dim, z_dim),
+    torch.nn.ReLU()
 )
 
 # Decoder
@@ -63,9 +65,9 @@ def sample_X(size, include_y=False):
     return X
 
 
-Q_solver = optim.Adam(Q.parameters(), lr=lr)
-P_solver = optim.Adam(P.parameters(), lr=lr)
-D_solver = optim.Adam(D.parameters(), lr=lr)
+Q_solver = optim.SGD(Q.parameters(), lr=lr, momentum=0.9)
+P_solver = optim.SGD(P.parameters(), lr=lr, momentum=0.9)
+D_solver = optim.SGD(D.parameters(), lr=lr / 10.)
 
 
 for it in range(1000000):
@@ -90,7 +92,9 @@ for it in range(1000000):
     D_real = D(z_real)
     D_fake = D(z_fake)
 
-    D_loss = -torch.mean(torch.log(D_real) + torch.log(1 - D_fake))
+    D_loss = -torch.mean(torch.log(D_real + TINY) + torch.log(1 - D_fake + TINY))
+    if D_loss.data[0] < 0:
+        D_loss.data[0] = 0.
 
     D_loss.backward()
     D_solver.step()
@@ -100,7 +104,9 @@ for it in range(1000000):
     z_fake = Q(X)
     D_fake = D(z_fake)
 
-    G_loss = -torch.mean(torch.log(D_fake))
+    G_loss = -torch.mean(torch.log(D_fake + TINY))
+    if G_loss.data[0] < 0:
+        G_loss.data[0] = 0.
 
     G_loss.backward()
     Q_solver.step()
